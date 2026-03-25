@@ -1,0 +1,49 @@
+#pragma plugin audio_recorder
+class audio_recorder_helper
+{
+bool recording = false;
+private int find_source(string source)
+{
+if(source == "both")
+{
+return AUDIO_SOURCE_BOTH;
+}
+else if(source == "system")
+{
+return AUDIO_SOURCE_SYSTEM ;
+}
+else if(source == "mic")
+{
+return AUDIO_SOURCE_MIC    ;
+}
+return -1;
+}
+bool start(string filename, string source)
+{
+int src = find_source(source);
+if(src == -1)
+{
+return false;
+}
+audio_recorder_start(filename,src);
+recording = true;
+return true;
+}
+void stop()
+{
+audio_recorder_stop();
+recording = false;
+}
+bool is_recording()
+{
+return audio_recorder_is_recording();
+}
+int get_bites()
+{
+return audio_recorder_get_recorded_bytes();
+}
+string get_error()
+{
+return audio_recorder_get_last_error();
+}
+}
