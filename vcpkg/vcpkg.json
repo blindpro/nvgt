@@ -11,7 +11,13 @@
     "libopusenc",
     "opus",
     "opusfile",
-    "sdl3-image",
+    {
+      "name": "sdl3-image",
+      "features": [
+        "png",
+        "jpeg"
+      ]
+    },
     "sdl3-ttf",
     "tiny-aes-c",
     "tinyexpr",
