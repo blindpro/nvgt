@@ -1,3 +1,4 @@
+#pragma plugin cmdpipe
 #pragma plugin nvgt_curl
 #pragma plugin git2nvgt
 #pragma plugin nvgt_sqlite

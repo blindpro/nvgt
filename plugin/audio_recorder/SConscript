@@ -1,0 +1,41 @@
+Import("env")
+
+import sys
+
+# This plugin is Windows-only (uses WASAPI)
+# It will still build stubs on other platforms so the SConscript doesn't error,
+# but the shared library is only produced on Windows.
+
+is_windows = (sys.platform == "win32")
+
+# Windows requires linking against these system libs for WASAPI / COM
+win_libs = ["ole32", "oleaut32", "uuid"]
+
+if ARGUMENTS.get("no_shared_plugins", "0") == "0":
+    if is_windows:
+        env.SharedLibrary(
+            "#release/lib/audio_recorder",
+            ["audio_recorder.cpp"],
+            LIBS=win_libs,
+            CXXFLAGS=env.get("CXXFLAGS", []) + ["/std:c++17"] if env.get("CC", "").endswith("cl") else ["-std=c++17"]
+        )
+    # On non-Windows we skip the shared build silently
+
+# Always build the static object (stubs compile on all platforms)
+static_obj = env.Object(
+    "audio_recorder_static",
+    "audio_recorder.cpp",
+    CPPDEFINES=[("NVGT_PLUGIN_STATIC", "audio_recorder")]
+)
+
+static_lib = env.StaticLibrary(
+    "#build/lib/audio_recorder",
+    [static_obj]
+)
+
+if is_windows:
+    static_result = [static_lib] + win_libs
+else:
+    static_result = [static_lib]
+
+Return("static_result")

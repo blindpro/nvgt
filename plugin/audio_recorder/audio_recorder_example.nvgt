@@ -1,0 +1,49 @@
+// audio_recorder_example.nvgt
+// Example showing how to use the audio_recorder plugin
+
+// Record from microphone for 5 seconds
+void record_mic_example() {
+    speak("Starting microphone recording...");
+
+    if (!audio_recorder_start("mic_recording.wav", 0)) {
+        speak("Failed to start mic recording: " + audio_recorder_get_last_error());
+        return;
+    }
+
+    // Wait 5 seconds
+    wait(5000);
+
+    audio_recorder_stop();
+    speak("Microphone recording saved to mic_recording.wav");
+}
+
+// Record system audio (loopback) for 5 seconds
+void record_system_example() {
+    speak("Starting system audio recording...");
+
+    if (!audio_recorder_start("system_recording.wav", 1)) {
+        speak("Failed to start system recording: " + audio_recorder_get_last_error());
+        return;
+    }
+
+    wait(5000);
+
+    audio_recorder_stop();
+    speak("System audio recording saved to system_recording.wav");
+}
+
+void main() {
+    // Show bytes being captured during a recording
+    audio_recorder_start("live_test.wav", 0); // 0 = mic
+
+    int elapsed = 0;
+    while (elapsed < 3000) {
+        wait(500);
+        elapsed += 500;
+        int bytes = audio_recorder_get_recorded_bytes();
+        speak("Captured " + bytes + " bytes so far...");
+    }
+
+    audio_recorder_stop();
+    speak("Done! File written.");
+}
