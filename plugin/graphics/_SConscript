@@ -1,0 +1,16 @@
+Import("env", "nvgt_env")
+
+libs = ["SDL3", "SDL3_ttf", "SDL3_image", "libpng16", "jpeg", "freetype", "z", "bz2", "user32", "gdi32", "shell32", "advapi32", "ole32", "oleaut32", "imm32", "winmm", "setupapi", "version", "cfgmgr32"]
+
+# Shared
+if ARGUMENTS.get("no_shared_plugins", "0") == "0":
+	env.SharedLibrary("#release/lib/graphics", ["graphics.cpp"], LIBS = libs)
+
+# Static
+static_obj = env.Object("graphics_static", "graphics.cpp", CPPDEFINES = [("NVGT_PLUGIN_STATIC", "graphics")])
+static_lib = env.StaticLibrary("#build/lib/graphics", [static_obj])
+
+# Ensure main engine links against required system libs if this plugin is used statically
+nvgt_env.Append(LIBS = libs)
+
+Return("static_lib")
