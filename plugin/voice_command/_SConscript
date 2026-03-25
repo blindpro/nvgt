@@ -1,0 +1,18 @@
+Import("env", "nvgt_env")
+
+if env["PLATFORM"] != "win32":
+	Return()
+
+# Shared
+if ARGUMENTS.get("no_shared_plugins", "0") == "0":
+	# Link against windowsapp for WinRT APIs
+	env.SharedLibrary("#release/lib/voice_command", ["voice_command.cpp"], LIBS = ["windowsapp", "user32"])
+
+# Static
+static_obj = env.Object("voice_command_static", "voice_command.cpp", CPPDEFINES = [("NVGT_PLUGIN_STATIC", "voice_command")])
+static_lib = env.StaticLibrary("#build/lib/voice_command", [static_obj])
+
+# Ensure main engine links against required system libs if this plugin is used statically
+nvgt_env.Append(LIBS = ["windowsapp"])
+
+Return("static_lib")
