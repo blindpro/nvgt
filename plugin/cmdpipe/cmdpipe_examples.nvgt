@@ -1,0 +1,256 @@
+// cmdpipe_examples.nvgt
+// Full usage examples for the cmdpipe NVGT plugin.
+// These show everything from simple one-shot commands
+// to a full interactive CMD shell session.
+//
+// SETUP: Copy cmdpipe.dll next to your .nvgt script, then:
+//   plugin_load("cmdpipe");
+
+// ════════════════════════════════════════════════════════════
+//  EXAMPLE 1: Run a single command, capture all output
+//  The simplest use case — fire a command, wait, get results.
+// ════════════════════════════════════════════════════════════
+void example_single_command() {
+    cmd_pipe@ shell = cmd_pipe();
+
+    // Open a CMD shell (hidden — no window shown)
+    if (!shell.open("cmd.exe")) {
+        speak("Failed to start CMD");
+        return;
+    }
+
+    // Send one command
+    shell.writeline("dir C:\\");
+
+    // Wait up to 3 seconds for all output then read it
+    string output = shell.read_stdout_wait(3000);
+
+    speak("Command output:");
+    speak(output);
+
+    shell.close_process();
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  EXAMPLE 2: Interactive shell session
+//  Keep CMD open and send multiple commands over time,
+//  reading the output after each one.
+// ════════════════════════════════════════════════════════════
+void example_interactive_session() {
+    cmd_pipe@ shell = cmd_pipe();
+
+    if (!shell.open("cmd.exe")) {
+        speak("Failed to start CMD");
+        return;
+    }
+
+    // Give CMD a moment to show its startup banner
+    wait(500);
+
+    // Flush and discard the startup banner text (we don't care about it)
+    shell.read_stdout(4096);
+
+    // ── Command 1: change directory ──
+    shell.writeline("cd C:\\Users");
+    wait(300);
+    string out1 = shell.read_stdout_wait(1000);
+    speak("After cd: " + out1);
+
+    // ── Command 2: list directory ──
+    shell.writeline("dir");
+    string out2 = shell.read_stdout_wait(2000);
+    speak("Directory listing:");
+    speak(out2);
+
+    // ── Command 3: echo something ──
+    shell.writeline("echo Hello from NVGT!");
+    string out3 = shell.read_stdout_wait(1000);
+    speak(out3);  // will say "Hello from NVGT!"
+
+    // ── Command 4: environment variable ──
+    shell.writeline("echo %USERNAME%");
+    string out4 = shell.read_stdout_wait(1000);
+    speak("Logged in as: " + out4);
+
+    shell.close_process();
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  EXAMPLE 3: Parse output line by line
+//  Split the output on newlines so you can process each line
+//  individually — great for structured command results.
+// ════════════════════════════════════════════════════════════
+void example_parse_output() {
+    cmd_pipe@ shell = cmd_pipe();
+    shell.open("cmd.exe");
+    wait(300);
+    shell.read_stdout(4096); // discard banner
+
+    // Run ipconfig to get network info
+    shell.writeline("ipconfig");
+    string raw = shell.read_stdout_wait(3000);
+
+    // Split on newlines manually
+    string[] lines = raw.split("\n");
+
+    speak("ipconfig returned " + lines.length() + " lines");
+
+    // Find and speak just the IPv4 lines
+    for (uint i = 0; i < lines.length(); i++) {
+        string line = lines[i].trim();
+        // string.find() returns -1 if not found, >= 0 if found
+        if (line.find("IPv4") >= 0) {
+            speak("IP address line: " + line);
+        }
+    }
+
+    shell.close_process();
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  EXAMPLE 4: Capture stderr separately
+//  Useful for running programs that write errors to stderr.
+// ════════════════════════════════════════════════════════════
+void example_stderr() {
+    cmd_pipe@ shell = cmd_pipe();
+    shell.open("cmd.exe");
+    wait(300);
+    shell.read_stdout(4096); // discard banner
+
+    // Try to run a command that doesn't exist — will produce error output
+    shell.writeline("thiscommanddoesnotexist");
+    wait(500);
+
+    string stdout_out = shell.read_stdout(4096);
+    string stderr_out = shell.read_stderr(4096);
+
+    if (stdout_out.length() > 0)
+        speak("stdout: " + stdout_out);
+
+    if (stderr_out.length() > 0)
+        speak("stderr (error): " + stderr_out);
+    else
+        // CMD.exe often routes error messages to stdout, not stderr
+        speak("Note: CMD routes most errors to stdout, not stderr.");
+
+    shell.close_process();
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  EXAMPLE 5: Game loop integration — non-blocking polling
+//  This is the proper way to use cmd_pipe inside a game loop.
+//  Output is checked every tick without freezing the game.
+// ════════════════════════════════════════════════════════════
+void example_game_loop() {
+    show_game_window("CMD Pipe Game Loop Demo");
+
+    cmd_pipe@ shell = cmd_pipe();
+    if (!shell.open("cmd.exe")) {
+        speak("Could not open CMD");
+        return;
+    }
+
+    wait(300);
+    shell.read_stdout(4096); // discard banner
+
+    bool command_sent = false;
+    string accumulated_output = "";
+
+    while (true) {
+        wait(16); // ~60fps
+
+        // Press SPACE to send a command
+        if (key_pressed(KEY_SPACE) && !command_sent) {
+            shell.writeline("systeminfo | findstr /C:\"OS Name\" /C:\"Total Physical Memory\"");
+            speak("Command sent! Waiting for output...");
+            command_sent = true;
+        }
+
+        // Every tick: drain any available output (non-blocking)
+        string chunk = shell.read_stdout();
+        if (chunk.length() > 0) {
+            accumulated_output += chunk;
+        }
+
+        // Press ENTER to hear whatever output has arrived so far
+        if (key_pressed(KEY_RETURN) && accumulated_output.length() > 0) {
+            speak(accumulated_output);
+            accumulated_output = "";
+        }
+
+        // Press C to clear and send another command
+        if (key_pressed(KEY_C)) {
+            accumulated_output = "";
+            command_sent = false;
+            speak("Cleared. Press space to send a new command.");
+        }
+
+        if (key_pressed(KEY_ESCAPE)) break;
+    }
+
+    shell.close_process();
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  EXAMPLE 6: Run Python / PowerShell / anything
+//  cmd_pipe works with ANY executable, not just cmd.exe.
+// ════════════════════════════════════════════════════════════
+void example_powershell() {
+    cmd_pipe@ ps = cmd_pipe();
+
+    // Launch PowerShell hidden, with no interactive profile
+    if (!ps.open("powershell.exe -NoProfile -NonInteractive")) {
+        speak("PowerShell not available");
+        return;
+    }
+
+    wait(500);
+    ps.read_stdout(4096); // discard startup
+
+    // Send a PowerShell command
+    ps.writeline("Get-Date -Format 'dddd, MMMM dd yyyy'");
+    string date_output = ps.read_stdout_wait(2000);
+    speak("Today is: " + date_output.trim());
+
+    // Run a quick one-liner
+    ps.writeline("(Get-PSDrive C).Free / 1GB");
+    string free_space = ps.read_stdout_wait(2000);
+    speak("Free GB on C drive: " + free_space.trim());
+
+    ps.close_process();
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  EXAMPLE 7: Check if process is still alive
+//  Useful for long-running processes.
+// ════════════════════════════════════════════════════════════
+void example_check_alive() {
+    cmd_pipe@ shell = cmd_pipe();
+    shell.open("cmd.exe");
+
+    speak("Process running: " + (shell.is_running() ? "yes" : "no"));
+
+    // Send exit command
+    shell.writeline("exit");
+    wait(500);
+
+    speak("Process running after exit: " + (shell.is_running() ? "yes" : "no"));
+    speak("Exit code: " + shell.get_exit_code());
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  Main — pick which example to run
+// ════════════════════════════════════════════════════════════
+void main() {
+    plugin_load("cmdpipe");
+
+    // Change this to run any of the examples above:
+    example_interactive_session();
+}

@@ -1,0 +1,8 @@
+Import("env")
+
+if ARGUMENTS.get("no_shared_plugins", "0") == "0":
+	libs = []
+	if env["PLATFORM"] == "win32": libs += ["user32"]
+	shared = env.SharedLibrary("#release/lib/cmdpipe", ["cmdpipe.cpp"], LIBS = libs)
+
+Return("shared")
