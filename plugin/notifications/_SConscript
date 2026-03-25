@@ -1,0 +1,18 @@
+Import("env", "nvgt_env")
+
+if env["PLATFORM"] != "win32":
+	Return()
+
+# Shared
+if ARGUMENTS.get("no_shared_plugins", "0") == "0":
+	# Link against windowsapp for WinRT Notifications + Shell/OLE for shortcuts
+	env.SharedLibrary("#release/lib/notifications", ["notifications.cpp"], LIBS = ["windowsapp", "shlwapi", "shell32", "user32", "ole32", "uuid"])
+
+# Static
+static_obj = env.Object("notifications_static", "notifications.cpp", CPPDEFINES = [("NVGT_PLUGIN_STATIC", "notifications")])
+static_lib = env.StaticLibrary("#build/lib/notifications", [static_obj])
+
+# Ensure main engine links against required system libs if this plugin is used statically
+nvgt_env.Append(LIBS = ["windowsapp", "shlwapi", "shell32", "ole32", "uuid"])
+
+Return("static_lib")
