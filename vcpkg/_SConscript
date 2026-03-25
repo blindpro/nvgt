@@ -27,7 +27,7 @@ def download_deps():
 	with zipfile.ZipFile(zip_path, "r") as f: f.extractall(osdev_path)
 	ts_file.write_text(str(latest))
 
-deps_mode = ARGUMENTS.get("deps", "download")
+deps_mode = ARGUMENTS.get("deps", "unmanaged")
 if deps_mode == "build": build_dependencies.build(out_dir = env["NVGT_OSDEV_PATH"])
 elif deps_mode == "download": download_deps()
 elif deps_mode != "unmanaged": Exit("deps argument must be one of build, download, or unmanaged.")
