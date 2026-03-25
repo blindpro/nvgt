@@ -1,0 +1,9 @@
+class helper_functions
+{
+private void close()
+{
+speak("exiting");
+exit();
+}
+
+}
