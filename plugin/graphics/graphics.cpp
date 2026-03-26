@@ -312,29 +312,29 @@ plugin_main(nvgt_plugin_shared* shared) {
 	asIScriptEngine* engine = shared->script_engine;
 	if (!prepare_plugin(shared)) return false;
 	
-	engine->RegisterObjectType("graphics_renderer", sizeof(CGraphics), asOBJ_REF);
-	engine->RegisterObjectBehaviour("graphics_renderer", asBEHAVE_FACTORY, "graphics_renderer@ f()", asFUNCTION(GfxFactory), asCALL_CDECL);
-	engine->RegisterObjectBehaviour("graphics_renderer", asBEHAVE_ADDREF, "void f()", asMETHOD(CGraphics, AddRef), asCALL_THISCALL);
-	engine->RegisterObjectBehaviour("graphics_renderer", asBEHAVE_RELEASE, "void f()", asMETHOD(CGraphics, Release), asCALL_THISCALL);
+	engine->RegisterObjectType("imige_renderer", sizeof(CGraphics), asOBJ_REF);
+	engine->RegisterObjectBehaviour("imige_renderer", asBEHAVE_FACTORY, "imige_renderer@ f()", asFUNCTION(GfxFactory), asCALL_CDECL);
+	engine->RegisterObjectBehaviour("imige_renderer", asBEHAVE_ADDREF, "void f()", asMETHOD(CGraphics, AddRef), asCALL_THISCALL);
+	engine->RegisterObjectBehaviour("imige_renderer", asBEHAVE_RELEASE, "void f()", asMETHOD(CGraphics, Release), asCALL_THISCALL);
 	
-	engine->RegisterObjectMethod("graphics_renderer", "bool setup(uint64 window_handle)", asMETHOD(CGraphics, setup), asCALL_THISCALL);
-	engine->RegisterObjectMethod("graphics_renderer", "int load_image(const string &in filename)", asMETHOD(CGraphics, load_image), asCALL_THISCALL);
-	engine->RegisterObjectMethod("graphics_renderer", "void draw_image(int id, int x, int y, int w, int h)", asMETHOD(CGraphics, draw_image), asCALL_THISCALL);
-	engine->RegisterObjectMethod("graphics_renderer", "void draw_image_region(int id, int x, int y, int w, int h, int sx, int sy, int sw, int sh)", asMETHOD(CGraphics, draw_image_region), asCALL_THISCALL);
+	engine->RegisterObjectMethod("imige_renderer", "bool setup(uint64 window_handle)", asMETHOD(CGraphics, setup), asCALL_THISCALL);
+	engine->RegisterObjectMethod("imige_renderer", "int load_image(const string &in filename)", asMETHOD(CGraphics, load_image), asCALL_THISCALL);
+	engine->RegisterObjectMethod("imige_renderer", "void draw_image(int id, int x, int y, int w, int h)", asMETHOD(CGraphics, draw_image), asCALL_THISCALL);
+	engine->RegisterObjectMethod("imige_renderer", "void draw_image_region(int id, int x, int y, int w, int h, int sx, int sy, int sw, int sh)", asMETHOD(CGraphics, draw_image_region), asCALL_THISCALL);
 	
-	engine->RegisterObjectMethod("graphics_renderer", "int load_font(const string &in font_name, float size, bool bold, bool italic)", asMETHOD(CGraphics, load_font), asCALL_THISCALL);
-	engine->RegisterObjectMethod("graphics_renderer", "bool select_font(int id)", asMETHOD(CGraphics, select_font), asCALL_THISCALL);
-	engine->RegisterObjectMethod("graphics_renderer", "void draw_text(const string &in text, int x, int y, int r, int g, int b)", asMETHOD(CGraphics, draw_text), asCALL_THISCALL);
-	engine->RegisterObjectMethod("graphics_renderer", "uint64 measure_text(const string &in text)", asMETHOD(CGraphics, measure_text), asCALL_THISCALL);
-	engine->RegisterObjectMethod("graphics_renderer", "void draw_text_wrapped(const string &in text, int x, int y, int w, int r, int g, int b)", asMETHOD(CGraphics, draw_text_wrapped), asCALL_THISCALL);
-	engine->RegisterObjectMethod("graphics_renderer", "uint64 measure_text_wrapped(const string &in text, int w)", asMETHOD(CGraphics, measure_text_wrapped), asCALL_THISCALL);
+	engine->RegisterObjectMethod("imige_renderer", "int load_font(const string &in font_name, float size, bool bold, bool italic)", asMETHOD(CGraphics, load_font), asCALL_THISCALL);
+	engine->RegisterObjectMethod("imige_renderer", "bool select_font(int id)", asMETHOD(CGraphics, select_font), asCALL_THISCALL);
+	engine->RegisterObjectMethod("imige_renderer", "void draw_text(const string &in text, int x, int y, int r, int g, int b)", asMETHOD(CGraphics, draw_text), asCALL_THISCALL);
+	engine->RegisterObjectMethod("imige_renderer", "uint64 measure_text(const string &in text)", asMETHOD(CGraphics, measure_text), asCALL_THISCALL);
+	engine->RegisterObjectMethod("imige_renderer", "void draw_text_wrapped(const string &in text, int x, int y, int w, int r, int g, int b)", asMETHOD(CGraphics, draw_text_wrapped), asCALL_THISCALL);
+	engine->RegisterObjectMethod("imige_renderer", "uint64 measure_text_wrapped(const string &in text, int w)", asMETHOD(CGraphics, measure_text_wrapped), asCALL_THISCALL);
 	
-	engine->RegisterObjectMethod("graphics_renderer", "void clear_screen(int r, int g, int b)", asMETHOD(CGraphics, clear_screen), asCALL_THISCALL);
-	engine->RegisterObjectMethod("graphics_renderer", "void draw_rect(int x, int y, int w, int h, int r, int g, int b, bool filled)", asMETHOD(CGraphics, draw_rect), asCALL_THISCALL);
-	engine->RegisterObjectMethod("graphics_renderer", "void draw_circle(int x, int y, int radius, int r, int g, int b, bool filled)", asMETHOD(CGraphics, draw_circle), asCALL_THISCALL);
-	engine->RegisterObjectMethod("graphics_renderer", "void draw_line(int x1, int y1, int x2, int y2, int r, int g, int b, int thickness)", asMETHOD(CGraphics, draw_line), asCALL_THISCALL);
-	engine->RegisterObjectMethod("graphics_renderer", "void draw_menu(const string &in items, int selected_index, int x, int y)", asMETHOD(CGraphics, draw_menu), asCALL_THISCALL);
-	engine->RegisterObjectMethod("graphics_renderer", "void present()", asMETHOD(CGraphics, present), asCALL_THISCALL);
+	engine->RegisterObjectMethod("imige_renderer", "void clear_screen(int r, int g, int b)", asMETHOD(CGraphics, clear_screen), asCALL_THISCALL);
+	engine->RegisterObjectMethod("imige_renderer", "void draw_rect(int x, int y, int w, int h, int r, int g, int b, bool filled)", asMETHOD(CGraphics, draw_rect), asCALL_THISCALL);
+	engine->RegisterObjectMethod("imige_renderer", "void draw_circle(int x, int y, int radius, int r, int g, int b, bool filled)", asMETHOD(CGraphics, draw_circle), asCALL_THISCALL);
+	engine->RegisterObjectMethod("imige_renderer", "void draw_line(int x1, int y1, int x2, int y2, int r, int g, int b, int thickness)", asMETHOD(CGraphics, draw_line), asCALL_THISCALL);
+	engine->RegisterObjectMethod("imige_renderer", "void draw_menu(const string &in items, int selected_index, int x, int y)", asMETHOD(CGraphics, draw_menu), asCALL_THISCALL);
+	engine->RegisterObjectMethod("imige_renderer", "void present()", asMETHOD(CGraphics, present), asCALL_THISCALL);
 	
 	return true;
 }
