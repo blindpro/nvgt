@@ -1,11 +1,11 @@
 // cmd pipe plugin turned into a process manager.
 #pragma plugin cmdpipe
-class process
+class shell_process
 {
 string name;
 cmd_pipe pipe;
 bool active = false;
-process(string name)
+shell_process(string name)
 {
 this.name = name;
 active = pipe.open(name);
