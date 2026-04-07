@@ -1,0 +1,57 @@
+// cmd pipe plugin turned into a process manager.
+#pragma plugin cmdpipe
+class process
+{
+string name;
+cmd_pipe pipe;
+bool active = false;
+process(string name)
+{
+this.name = name;
+active = pipe.open(name);
+}
+void send(string command)
+{
+pipe.writeline(command);
+}
+void write(string text)
+{
+pipe.write(text);
+}
+string read()
+{
+if(!active)
+{
+return "";
+}
+return pipe.read_stdout();
+}
+string read_wait(int ms)
+{
+if(!active)
+{
+return"";
+}
+return pipe.read_stdout_wait(ms);
+}
+string read_error()
+{
+if(!active)
+{
+return"";
+}
+return pipe.read_stderr();
+}
+void kill()
+{
+pipe.close_process();
+}
+int get_exit_code()
+{
+return pipe.get_exit_code();
+}
+bool is_running()
+{
+return pipe.is_running();
+}
+}
