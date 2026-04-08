@@ -280,7 +280,13 @@ void ShowAngelscriptMessages() {
 		#endif
 	g_scriptMessagesErr = g_scriptMessagesWarn = g_scriptMessagesLine0 = ""; // Clear out the message buffers such that only new messages will be displayed upon a second call to this function.
 }
-
+std::string get_hint(const std::string& msg)
+{
+std::string hint = "hint: ";
+if(msg.find("Non-terminated string literal") !=std::string::npos)
+	hint += "Check for unclosed quotes.";
+return hint;
+}
 void MessageCallback(const asSMessageInfo *msg, void* param) {
 	string type = "ERROR";
 	if (msg->type == asMSGTYPE_WARNING)
@@ -290,6 +296,7 @@ void MessageCallback(const asSMessageInfo *msg, void* param) {
 	else
 		g_scriptMessagesErrNum += 1;
 	std::string buffer = format(Util::Application::instance().config().getString("application.compilation_message_template", "file: %s\r\nline: %u (%u)\r\n%s: %s\r\n") + "\r\n"s, string(msg->section), uint32_t(msg->row > 0 ? msg->row : 0), uint32_t(msg->col > 0 ? msg->col : 0), string(type), string(msg->message));
+buffer+= get_hint(msg->message);
 	if (msg->type == asMSGTYPE_INFORMATION)
 		g_scriptMessagesInfo = buffer;
 	else if (msg->type == asMSGTYPE_ERROR) {
