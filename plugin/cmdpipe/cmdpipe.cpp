@@ -1,7 +1,6 @@
 #include <string>
 #include <vector>
 #include <sstream>
-#include <chrono>
 #ifdef _WIN32
     #define WIN32_LEAN_AND_MEAN
     #include <windows.h>
@@ -13,15 +12,6 @@
 #endif
 #include "../../src/nvgt_plugin.h"
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  CmdPipe — persistent shell with sentinel-based output fencing
-//
-//  Design:
-//    open(command)            — spawns the shell (e.g. "cmd.exe" or "powershell")
-//    run(command, timeout_ms) — sends command, waits for sentinel, returns clean output
-//    write/writeline          — raw access if you need it
-//    read_stdout/read_stderr  — raw non-blocking reads
-// ─────────────────────────────────────────────────────────────────────────────
 class CmdPipe {
 public:
     int refcount;
@@ -50,14 +40,9 @@ public:
 
     ~CmdPipe() { close_process(); }
 
-    // ── open ──────────────────────────────────────────────────────────────────
-    // Spawn the shell.  Detects powershell/pwsh automatically to adjust
-    // sentinel syntax.  Also sends an initial "echo off" for cmd.exe so
-    // prompts and command echoes are suppressed from the very first command.
     bool open(const std::string& command) {
         if (running) close_process();
 
-        // Detect shell type for sentinel command syntax
         std::string lower = command;
         for (char& c : lower) c = (char)tolower((unsigned char)c);
         is_powershell = (lower.find("powershell") != std::string::npos ||
@@ -66,40 +51,34 @@ public:
         if (!spawn(command)) return false;
         running = true;
 
-        if (!is_powershell) {
-            // Turn off command echo for cmd.exe — discard the startup banner
+        if (!is_powershell)
             raw_writeline("@echo off");
-            drain_until_quiet(500);
-        } else {
-            // PowerShell: suppress its startup banner by just draining it
-            drain_until_quiet(800);
-        }
+
+        // Send a sentinel immediately so we block until the shell is truly ready
+        std::string init_sentinel = make_sentinel();
+        if (is_powershell)
+            raw_writeline("Write-Output '" + init_sentinel + "'");
+        else
+            raw_writeline("echo " + init_sentinel);
+
+        read_until_sentinel(init_sentinel, 10000);
         return true;
     }
 
-    // ── run ───────────────────────────────────────────────────────────────────
-    // Send one command, block until its output is complete, return clean output.
-    // timeout_ms is the maximum time to wait for the sentinel to appear.
     std::string run(const std::string& command, int timeout_ms = 5000) {
         if (!running) return "";
 
-        // Build a unique sentinel string
         std::string sentinel = make_sentinel();
 
-        // Send the user's command, then immediately send the sentinel command.
-        // For cmd.exe:   echo __NVGT_DONE_12345__
-        // For PowerShell: Write-Host "__NVGT_DONE_12345__"
         raw_writeline(command);
         if (is_powershell)
-            raw_writeline("Write-Host '" + sentinel + "'");
+            raw_writeline("Write-Output '" + sentinel + "'");
         else
             raw_writeline("echo " + sentinel);
 
-        // Read until we see the sentinel line, then return everything before it
         return read_until_sentinel(sentinel, timeout_ms);
     }
 
-    // ── raw write access ──────────────────────────────────────────────────────
     bool write(const std::string& text) {
         if (!running || text.empty()) return false;
         return raw_write(text);
@@ -113,7 +92,6 @@ public:
 #endif
     }
 
-    // ── raw non-blocking reads ─────────────────────────────────────────────────
     std::string read_stdout(int max_bytes = 4096) {
         if (!running) return "";
 #ifdef _WIN32
@@ -132,7 +110,6 @@ public:
 #endif
     }
 
-    // ── blocking read (legacy helper) ─────────────────────────────────────────
     std::string read_stdout_wait(int timeout_ms = 2000) {
         std::string result;
         int waited = 0;
@@ -140,7 +117,7 @@ public:
             std::string chunk = read_stdout(4096);
             if (!chunk.empty()) {
                 result += chunk;
-                waited = timeout_ms - 100;   // got data; allow 100 ms more to drain
+                waited = timeout_ms - 100;
             } else {
                 sleep_ms(10);
                 waited += 10;
@@ -149,7 +126,6 @@ public:
         return result;
     }
 
-    // ── process state ─────────────────────────────────────────────────────────
     bool is_running() {
         if (!running) return false;
 #ifdef _WIN32
@@ -215,48 +191,34 @@ private:
     int fd_stdin, fd_stdout, fd_stderr;
 #endif
 
-    // ── sentinel generation ────────────────────────────────────────────────────
-    // Each call to run() gets a unique marker so stale output from a previous
-    // command can never be mistaken for the end of the current one.
     std::string make_sentinel() {
         return "__NVGT_DONE_" + std::to_string(++sentinel_counter) + "__";
     }
 
-    // ── read until sentinel ────────────────────────────────────────────────────
-    // Accumulates stdout until the sentinel line appears, then returns
-    // everything before it with prompts and blank leading/trailing lines stripped.
     std::string read_until_sentinel(const std::string& sentinel, int timeout_ms) {
         std::string accumulated;
-        int waited = 0;
-        const int poll_interval = 10;   // ms between polls
+        int elapsed = 0;
+        const int poll_interval = 10;
 
-        while (waited < timeout_ms) {
+        while (elapsed < timeout_ms) {
             std::string chunk = read_stdout(8192);
             if (!chunk.empty()) {
                 accumulated += chunk;
-                // Check whether the sentinel has arrived yet
                 std::string::size_type pos = accumulated.find(sentinel);
                 if (pos != std::string::npos) {
-                    // Keep only what came before the sentinel line
                     std::string before = accumulated.substr(0, pos);
                     return clean_output(before);
                 }
-                // Got data but not the sentinel yet — reset idle timer
-                waited = 0;
-            } else {
-                sleep_ms(poll_interval);
-                waited += poll_interval;
+                // Got data but no sentinel yet — keep going, do NOT reset elapsed
             }
+            sleep_ms(poll_interval);
+            elapsed += poll_interval;
         }
-        // Timed out — return whatever we have (minus any partial sentinel)
+
+        // Timed out — return whatever arrived
         return clean_output(accumulated);
     }
 
-    // ── clean_output ──────────────────────────────────────────────────────────
-    // Removes:
-    //   • cmd.exe / PowerShell prompt lines  (e.g. "C:\Users\foo>", "PS C:\>")
-    //   • Blank lines at the top and bottom
-    //   • Windows \r characters
     std::string clean_output(const std::string& raw) {
         // Normalise line endings
         std::string text;
@@ -290,44 +252,23 @@ private:
         return result;
     }
 
-    // Returns true for lines that are shell prompts we should discard
     bool is_prompt_line(const std::string& line) {
         if (line.empty()) return false;
 
-        // cmd.exe prompt: ends with '>' possibly preceded by a path
-        // e.g. "C:\Users\Bob>" or "C:\>"
         if (!is_powershell) {
-            // A prompt line contains '>' as the last non-space char and a drive letter
             size_t gt = line.rfind('>');
             if (gt != std::string::npos && gt + 1 == line.size()) {
-                // Looks like a prompt — must have at least a letter + colon before it
                 if (gt >= 2 && line[1] == ':') return true;
-                // Or just bare ">"
                 if (gt == 0) return true;
             }
             return false;
         } else {
-            // PowerShell prompt: starts with "PS " or just "PS>"
             if (line.size() >= 3 && line[0]=='P' && line[1]=='S' &&
                 (line[2]==' ' || line[2]=='>')) return true;
             return false;
         }
     }
 
-    // ── drain helper (used at startup) ────────────────────────────────────────
-    // Reads and discards output until the pipe is quiet for quiet_ms milliseconds
-    void drain_until_quiet(int quiet_ms) {
-        int silent = 0;
-        while (silent < quiet_ms) {
-            std::string chunk = read_stdout(8192);
-            if (!chunk.empty()) { silent = 0; }
-            else { sleep_ms(20); silent += 20; }
-        }
-        // Also drain stderr
-        while (!read_stderr(8192).empty()) {}
-    }
-
-    // ── portable sleep ────────────────────────────────────────────────────────
     static void sleep_ms(int ms) {
 #ifdef _WIN32
         Sleep((DWORD)ms);
@@ -336,7 +277,6 @@ private:
 #endif
     }
 
-    // ── raw write ─────────────────────────────────────────────────────────────
     bool raw_write(const std::string& text) {
         if (text.empty()) return false;
 #ifdef _WIN32
@@ -356,7 +296,6 @@ private:
 #endif
     }
 
-    // ── read_pipe (platform-specific non-blocking read) ───────────────────────
 #ifdef _WIN32
     std::string read_pipe(HANDLE h, int max_bytes) {
         if (!h) return "";
@@ -380,7 +319,6 @@ private:
     }
 #endif
 
-    // ── spawn (platform-specific process creation) ────────────────────────────
     bool spawn(const std::string& command) {
 #ifdef _WIN32
         HANDLE hStdin_Read   = NULL;
@@ -475,9 +413,6 @@ private:
     }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Plugin registration
-// ─────────────────────────────────────────────────────────────────────────────
 plugin_main(nvgt_plugin_shared* shared) {
     prepare_plugin(shared);
     asIScriptEngine* engine = shared->script_engine;
@@ -494,12 +429,9 @@ plugin_main(nvgt_plugin_shared* shared) {
     engine->RegisterObjectMethod("cmd_pipe",
         "bool open(const string&in command)",
         asMETHOD(CmdPipe, open), asCALL_THISCALL);
-
-    // ★ The main new method — use this instead of writeline + read_stdout_wait
     engine->RegisterObjectMethod("cmd_pipe",
         "string run(const string&in command, int timeout_ms = 5000)",
         asMETHOD(CmdPipe, run), asCALL_THISCALL);
-
     engine->RegisterObjectMethod("cmd_pipe",
         "bool write(const string&in text)",
         asMETHOD(CmdPipe, write), asCALL_THISCALL);

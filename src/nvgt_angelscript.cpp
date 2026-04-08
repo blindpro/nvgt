@@ -975,7 +975,7 @@ int PragmaCallback(const string &pragmaText, CScriptBuilder &builder, void* /*us
 	else if (cleanText.starts_with("asset $")) add_game_asset_to_bundle(cleanText.substr(7), GAME_ASSET_UNCOMPRESSED);
 	else if (cleanText.starts_with("asset")) add_game_asset_to_bundle(cleanText.substr(6));
 	else if (cleanText.starts_with("document")) add_game_asset_to_bundle(cleanText.substr(9), GAME_ASSET_DOCUMENT);
-	else if (cleanText.starts_with("plugin ")) {
+	else if (cleanText.starts_with("plugin ")|| cleanText.starts_with("import ")) {
 		string plugin_name = cleanText.substr(7);
 		if (find(g_pending_plugins.begin(), g_pending_plugins.end(), plugin_name) == g_pending_plugins.end())
 			g_pending_plugins.push_back(plugin_name);
