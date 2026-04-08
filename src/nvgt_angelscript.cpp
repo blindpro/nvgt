@@ -295,7 +295,11 @@ if(msg.find("Not all paths return a value")!=std::string::npos)
 hint+= "Your function must return a value. Make sure that your function returns a value  in any given kase.";
 if(msg.find("No matching symbol")!=std::string::npos)
 hint+= "Make sure all functions and variables being used are properly created and included in your code.";
+if(hint!="hint: ")
+{
 return hint+"\r\n";
+}
+return "";
 }
 void MessageCallback(const asSMessageInfo *msg, void* param) {
 	string type = "ERROR";
