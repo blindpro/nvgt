@@ -283,9 +283,19 @@ void ShowAngelscriptMessages() {
 std::string get_hint(const std::string& msg)
 {
 std::string hint = "hint: ";
+if(msg.find("No entry point found (either 'int main()' or 'void main()'.)")!=std::string::npos)
+hint+= "All programs that are not include scripts must contain a main function, void main or int main. Please create this and write your code inside this function";
+if(msg.find("Unexpected end of file")!=std::string::npos)
+hint+="Check for missing closing braces at the end of your code blocks.";
 if(msg.find("Non-terminated string literal") !=std::string::npos)
 	hint += "Check for unclosed quotes.";
-return hint;
+if(msg.find("Expected ',' or ';'")!=std::string::npos)
+hint+=" Check for a missing ; at the end of the line, and missing commas in your function calls.";
+if(msg.find("Not all paths return a value")!=std::string::npos)
+hint+= "Your function must return a value. Make sure that your function returns a value  in any given kase.";
+if(msg.find("No matching symbol")!=std::string::npos)
+hint+= "Make sure all functions and variables being used are properly created and included in your code.";
+return hint+"\r\n";
 }
 void MessageCallback(const asSMessageInfo *msg, void* param) {
 	string type = "ERROR";
