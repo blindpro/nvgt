@@ -1,0 +1,278 @@
+// cmd_runner.cpp
+// NVGT plugin for running PowerShell/CMD commands and reading their output
+// via a temporary log file. This avoids pipe-capture issues by redirecting
+// stdout+stderr to a temp file, then reading that file back.
+//
+// Registered AngelScript functions:
+//   string cmd_run(const string &in command, bool use_powershell = false)
+//      Runs a command, captures its output to a temp file, and returns the
+//      output as a string. Returns empty string on error.
+//
+//   int cmd_run_async(const string &in command, const string &in log_path, bool use_powershell = false)
+//      Launches a command in the background, redirecting output to log_path.
+//      Returns 0 on success, non-zero on failure.
+//      Call cmd_read_log(log_path) later to retrieve output.
+//
+//   string cmd_read_log(const string &in log_path)
+//      Reads and returns the full contents of a log file written by a prior
+//      cmd_run_async call (or any other text file).
+//
+//   bool cmd_log_exists(const string &in log_path)
+//      Returns true if the given log file currently exists on disk.
+//
+//   bool cmd_delete_log(const string &in log_path)
+//      Deletes the given log file. Returns true on success.
+//
+//   string cmd_get_temp_path()
+//      Returns a usable temp directory path (with trailing separator).
+
+#include <string>
+#include <fstream>
+#include <sstream>
+#include <cstdio>
+#include <cstdlib>
+
+#ifdef _WIN32
+    #include <windows.h>
+    #include <process.h>
+    #define OS_WINDOWS
+#else
+    #include <unistd.h>
+    #include <sys/stat.h>
+#endif
+
+#include "../../src/nvgt_plugin.h"
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+static std::string get_temp_path_impl() {
+#ifdef OS_WINDOWS
+    char buf[MAX_PATH];
+    DWORD len = GetTempPathA(MAX_PATH, buf);
+    if (len == 0 || len > MAX_PATH) return "C:\\Temp\\";
+    return std::string(buf);
+#else
+    const char* tmpdir = getenv("TMPDIR");
+    if (tmpdir && tmpdir[0]) return std::string(tmpdir) + "/";
+    return "/tmp/";
+#endif
+}
+
+// Build a unique temp file path for synchronous runs.
+static std::string make_temp_log_path() {
+    static int counter = 0;
+    std::ostringstream ss;
+    ss << get_temp_path_impl() << "nvgt_cmd_" << (unsigned long)counter++ << "_"
+#ifdef OS_WINDOWS
+       << (unsigned long)GetCurrentProcessId();
+#else
+       << (unsigned long)getpid();
+#endif
+    ss << ".log";
+    return ss.str();
+}
+
+// Read an entire file into a std::string.
+static std::string read_file_contents(const std::string& path) {
+    std::ifstream f(path.c_str(), std::ios::binary);
+    if (!f.is_open()) return "";
+    std::ostringstream ss;
+    ss << f.rdbuf();
+    return ss.str();
+}
+
+// ---------------------------------------------------------------------------
+// Build the shell command string that redirects stdout+stderr to log_path.
+// ---------------------------------------------------------------------------
+static std::string build_redirect_command(const std::string& user_cmd,
+                                          const std::string& log_path,
+                                          bool use_powershell) {
+#ifdef OS_WINDOWS
+    if (use_powershell) {
+        // Run through PowerShell; quote the log path in case it has spaces.
+        // PowerShell's *> redirects all streams.
+        return "powershell.exe -NoProfile -NonInteractive -Command \""
+               + user_cmd + "\" *> \"" + log_path + "\"";
+    } else {
+        // Plain CMD. 2>&1 merges stderr into stdout, then > writes to file.
+        return "cmd.exe /C \"" + user_cmd + "\" > \"" + log_path + "\" 2>&1";
+    }
+#else
+    // Linux/macOS: use sh or bash.
+    if (use_powershell) {
+        // If pwsh is installed, use it.
+        return "pwsh -NonInteractive -Command '" + user_cmd
+               + "' > '" + log_path + "' 2>&1";
+    } else {
+        return "sh -c '" + user_cmd + "' > '" + log_path + "' 2>&1";
+    }
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// Synchronous: run command, wait for it, return output as string.
+// ---------------------------------------------------------------------------
+static std::string cmd_run_impl(const std::string& command, bool use_powershell) {
+    std::string log_path = make_temp_log_path();
+    std::string full_cmd = build_redirect_command(command, log_path, use_powershell);
+
+#ifdef OS_WINDOWS
+    // Use CREATE_NO_WINDOW so no console flashes up.
+    STARTUPINFOA si;
+    PROCESS_INFORMATION pi;
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    ZeroMemory(&pi, sizeof(pi));
+
+    // CreateProcess needs a mutable buffer.
+    std::vector<char> cmd_buf(full_cmd.begin(), full_cmd.end());
+    cmd_buf.push_back('\0');
+
+    if (!CreateProcessA(NULL, cmd_buf.data(), NULL, NULL, FALSE,
+                        CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
+        return "";
+    }
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+#else
+    system(full_cmd.c_str());
+#endif
+
+    std::string output = read_file_contents(log_path);
+    // Clean up temp file.
+    std::remove(log_path.c_str());
+    return output;
+}
+
+// ---------------------------------------------------------------------------
+// Async: launch command, do NOT wait; caller reads log_path later.
+// Returns 0 on success, non-zero on failure.
+// ---------------------------------------------------------------------------
+static int cmd_run_async_impl(const std::string& command,
+                               const std::string& log_path,
+                               bool use_powershell) {
+    std::string full_cmd = build_redirect_command(command, log_path, use_powershell);
+
+#ifdef OS_WINDOWS
+    STARTUPINFOA si;
+    PROCESS_INFORMATION pi;
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    ZeroMemory(&pi, sizeof(pi));
+
+    std::vector<char> cmd_buf(full_cmd.begin(), full_cmd.end());
+    cmd_buf.push_back('\0');
+
+    if (!CreateProcessA(NULL, cmd_buf.data(), NULL, NULL, FALSE,
+                        CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
+        return (int)GetLastError();
+    }
+    // Don't wait — caller will poll the log file.
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    return 0;
+#else
+    // Append a background & so we don't block.
+    full_cmd += " &";
+    return system(full_cmd.c_str());
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// Log file utilities
+// ---------------------------------------------------------------------------
+static std::string cmd_read_log_impl(const std::string& log_path) {
+    return read_file_contents(log_path);
+}
+
+static bool cmd_log_exists_impl(const std::string& log_path) {
+    std::ifstream f(log_path.c_str());
+    return f.good();
+}
+
+static bool cmd_delete_log_impl(const std::string& log_path) {
+    return std::remove(log_path.c_str()) == 0;
+}
+
+static std::string cmd_get_temp_path_impl() {
+    return get_temp_path_impl();
+}
+
+// ---------------------------------------------------------------------------
+// AngelScript wrappers (must match AS calling convention)
+// ---------------------------------------------------------------------------
+static std::string as_cmd_run(const std::string& command, bool use_powershell) {
+    return cmd_run_impl(command, use_powershell);
+}
+
+static int as_cmd_run_async(const std::string& command,
+                             const std::string& log_path,
+                             bool use_powershell) {
+    return cmd_run_async_impl(command, log_path, use_powershell);
+}
+
+static std::string as_cmd_read_log(const std::string& log_path) {
+    return cmd_read_log_impl(log_path);
+}
+
+static bool as_cmd_log_exists(const std::string& log_path) {
+    return cmd_log_exists_impl(log_path);
+}
+
+static bool as_cmd_delete_log(const std::string& log_path) {
+    return cmd_delete_log_impl(log_path);
+}
+
+static std::string as_cmd_get_temp_path() {
+    return cmd_get_temp_path_impl();
+}
+
+// ---------------------------------------------------------------------------
+// Plugin entry point
+// ---------------------------------------------------------------------------
+plugin_main(nvgt_plugin_shared* shared) {
+    prepare_plugin(shared);
+
+    asIScriptEngine* engine = shared->script_engine;
+
+    // string cmd_run(const string &in command, bool use_powershell = false)
+    engine->RegisterGlobalFunction(
+        "string cmd_run(const string &in command, bool use_powershell = false)",
+        asFUNCTION(as_cmd_run),
+        asCALL_CDECL);
+
+    // int cmd_run_async(const string &in command, const string &in log_path, bool use_powershell = false)
+    engine->RegisterGlobalFunction(
+        "int cmd_run_async(const string &in command, const string &in log_path, bool use_powershell = false)",
+        asFUNCTION(as_cmd_run_async),
+        asCALL_CDECL);
+
+    // string cmd_read_log(const string &in log_path)
+    engine->RegisterGlobalFunction(
+        "string cmd_read_log(const string &in log_path)",
+        asFUNCTION(as_cmd_read_log),
+        asCALL_CDECL);
+
+    // bool cmd_log_exists(const string &in log_path)
+    engine->RegisterGlobalFunction(
+        "bool cmd_log_exists(const string &in log_path)",
+        asFUNCTION(as_cmd_log_exists),
+        asCALL_CDECL);
+
+    // bool cmd_delete_log(const string &in log_path)
+    engine->RegisterGlobalFunction(
+        "bool cmd_delete_log(const string &in log_path)",
+        asFUNCTION(as_cmd_delete_log),
+        asCALL_CDECL);
+
+    // string cmd_get_temp_path()
+    engine->RegisterGlobalFunction(
+        "string cmd_get_temp_path()",
+        asFUNCTION(as_cmd_get_temp_path),
+        asCALL_CDECL);
+
+    return true;
+}
