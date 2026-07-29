@@ -77,6 +77,7 @@ env["PLUGIN_DEST_DIR"] = "#release/lib_android" if env["NVGT_TARGET"] == "androi
 # plugins
 static_plugins = []
 static_plugins_object = None
+plugin_env = env.Clone()
 if  ARGUMENTS.get("no_plugins", "0") == "0":
 	try:
 		# First, read the list of static plugins we wish to link if available.
@@ -86,7 +87,6 @@ if  ARGUMENTS.get("no_plugins", "0") == "0":
 				if not l or l.startswith("#"): continue
 				static_plugins.append(l.strip())
 	except FileNotFoundError: pass
-	plugin_env = env.Clone()
 	if env["NVGT_TARGET"] == "android":
 		plugin_env.Append(CXXFLAGS = ["-fPIC"])
 		plugin_env["SHLIBPREFIX"] = ""
@@ -153,13 +153,11 @@ if env["NVGT_TARGET"] == "windows":
 	env.Append(LINKFLAGS = ["/delayload:plist-2.0.dll", "/delayload:archive.dll"])
 	env.Append(LIBS = ["plist-2.0", "archive"])
 	env["no_import_lib"] = 0
-elif env["NVGT_TARGET"] == "android":
-	env["no_import_lib"] = 1
-else: # linux and macos
-	env.Append(LIBS = ["plist-2.0", "archive"])
+elif env["NVGT_TARGET"] == "android": env["no_import_lib"] = 1
+elif env["NVGT_TARGET"] != "ios": env.Append(LIBS = ["plist-2.0", "archive"])
 extra_objects = [version_object]
 if static_plugins_object: extra_objects.append(static_plugins_object)
-if env["NVGT_TARGET"] not in ("ios", "android"):
+if env["NVGT_TARGET"] not in ["android", "ios"]:
 	if ARGUMENTS.get("debug", "0") == "1": env["PDB"] = "#build/debug/nvgt.pdb"
 	nvgt = env.Program("release/nvgt", env.Object([os.path.join("build/obj_src", s) for s in sources]) + extra_objects)
 	if env["NVGT_TARGET"] == "macos":
@@ -220,7 +218,7 @@ def fix_stub(target, source, env):
 			f.write(b"NV")
 			f.close()
 
-if ARGUMENTS.get("no_stubs", "0") == "0" and env["NVGT_TARGET"] not in ("ios", "android"):
+if ARGUMENTS.get("no_stubs", "0") == "0" and env["NVGT_TARGET"] not in ("android"):
 	stub_platform = env["NVGT_TARGET"] if env["NVGT_TARGET"] != "macos" else "mac"
 	VariantDir("build/obj_stub", "src", duplicate = 0)
 	stub_env.Append(CPPDEFINES = ["NVGT_STUB"])
