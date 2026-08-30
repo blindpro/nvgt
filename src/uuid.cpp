@@ -13,6 +13,7 @@
 #include "uuid.h"
 
 #include <Poco/Exception.h>
+#include <Poco/SHA1Engine.h>
 #include <Poco/UUIDGenerator.h>
 
 #include <cstring>
@@ -63,6 +64,16 @@ void uuid_set_bytes(Poco::UUID& uuid, const std::string& bytes) {
 		uuid.copyFrom(bytes.data());
 }
 
+Poco::UUID uuid_create_from_name_sha1(const Poco::UUID& nsid, const std::string& name) {
+	Poco::SHA1Engine engine;
+	return Poco::UUIDGenerator::defaultGenerator().createFromName(nsid, name, engine, Poco::UUID::UUID_NAME_BASED_SHA1);
+}
+
+Poco::UUID uuid_namespace_dns() { return Poco::UUID::dns(); }
+Poco::UUID uuid_namespace_url() { return Poco::UUID::uri(); }
+Poco::UUID uuid_namespace_oid() { return Poco::UUID::oid(); }
+Poco::UUID uuid_namespace_x500() { return Poco::UUID::x500(); }
+
 void RegisterUUID(asIScriptEngine* engine) {
 	engine->RegisterObjectType("uuid", sizeof(Poco::UUID), asOBJ_VALUE | asGetTypeTraits<Poco::UUID>());
 	engine->RegisterObjectBehaviour("uuid", asBEHAVE_CONSTRUCT, "void f()", asFUNCTION(generic_construct<Poco::UUID>), asCALL_CDECL_OBJFIRST);
@@ -86,9 +97,12 @@ void RegisterUUID(asIScriptEngine* engine) {
 	engine->RegisterGlobalFunction("uuid uuid_generate()", asMETHOD(Poco::UUIDGenerator, createOne), asCALL_THISCALL_ASGLOBAL, &Poco::UUIDGenerator::defaultGenerator());
 	engine->RegisterGlobalFunction("uuid uuid_generate_random()", asMETHOD(Poco::UUIDGenerator, createRandom), asCALL_THISCALL_ASGLOBAL, &Poco::UUIDGenerator::defaultGenerator());
 	engine->RegisterGlobalFunction("uuid uuid_generate_time()", asMETHOD(Poco::UUIDGenerator, create), asCALL_THISCALL_ASGLOBAL, &Poco::UUIDGenerator::defaultGenerator());
+	engine->RegisterGlobalFunction("uuid uuid_generate_time_v6()", asMETHOD(Poco::UUIDGenerator, createV6), asCALL_THISCALL_ASGLOBAL, &Poco::UUIDGenerator::defaultGenerator());
+	engine->RegisterGlobalFunction("uuid uuid_generate_time_v7()", asMETHOD(Poco::UUIDGenerator, createV7), asCALL_THISCALL_ASGLOBAL, &Poco::UUIDGenerator::defaultGenerator());
 	engine->RegisterGlobalFunction("uuid uuid_create_from_name(const uuid&in, const string&in)", asMETHODPR(Poco::UUIDGenerator, createFromName, (const Poco::UUID&, const std::string&), Poco::UUID), asCALL_THISCALL_ASGLOBAL, &Poco::UUIDGenerator::defaultGenerator());
-	engine->RegisterGlobalFunction("uuid uuid_namespace_dns()", asFUNCTION(Poco::UUID::dns), asCALL_CDECL);
-	engine->RegisterGlobalFunction("uuid uuid_namespace_url()", asFUNCTION(Poco::UUID::uri), asCALL_CDECL);
-	engine->RegisterGlobalFunction("uuid uuid_namespace_oid()", asFUNCTION(Poco::UUID::oid), asCALL_CDECL);
-	engine->RegisterGlobalFunction("uuid uuid_namespace_x500()", asFUNCTION(Poco::UUID::x500), asCALL_CDECL);
+	engine->RegisterGlobalFunction("uuid uuid_create_from_name_sha1(const uuid&in, const string&in)", asFUNCTION(uuid_create_from_name_sha1), asCALL_CDECL);
+	engine->RegisterGlobalFunction("uuid uuid_namespace_dns()", asFUNCTION(uuid_namespace_dns), asCALL_CDECL);
+	engine->RegisterGlobalFunction("uuid uuid_namespace_url()", asFUNCTION(uuid_namespace_url), asCALL_CDECL);
+	engine->RegisterGlobalFunction("uuid uuid_namespace_oid()", asFUNCTION(uuid_namespace_oid), asCALL_CDECL);
+	engine->RegisterGlobalFunction("uuid uuid_namespace_x500()", asFUNCTION(uuid_namespace_x500), asCALL_CDECL);
 }
